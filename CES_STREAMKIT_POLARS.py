@@ -25,8 +25,8 @@ footer {margin-top: 0.5rem;}
 # --- LOAD DATA ---
 @st.cache_resource
 def load_panel_data():
-    df_CES = pl.read_parquet("full_panel_data_parquet/CES_2015_2026_01_14.parquet")
-    df_CEU = pl.read_parquet("full_panel_data_parquet/CEU_2015_2026_01_14.parquet")
+    df_CES = pl.read_parquet("CES_2015_2026_01_14.parquet")
+    df_CEU = pl.read_parquet("CEU_2015_2026_01_14.parquet")
     return df_CES, df_CEU
 df_CES, df_CEU = load_panel_data()
 
@@ -378,5 +378,6 @@ with col2:
             st.plotly_chart(fig, use_container_width=True)
         else:
             st.warning("No data available for the combination selected.")
+
 
 st.markdown("<br><span style='color: gray; font-size: 13px;'>Source: U.S. Bureau of Labor Statistics, CES/CEU (Current Employment Statistics)</span>", unsafe_allow_html=True)
