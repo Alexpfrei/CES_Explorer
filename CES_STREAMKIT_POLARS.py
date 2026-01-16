@@ -458,6 +458,46 @@ with col3:
     )
     st.divider()
 
+    # ----- PATCH: Remove sector logic BEFORE widget rendering -----
+    def clear_remove_triggers(max_cols=8):
+        for i in range(max_cols):
+            k = f'c3_remove_trigger_{i}'
+            if k in st.session_state:
+                del st.session_state[k]
+
+    remove_idx = None
+    max_cols = 8
+
+    # Detect if a remove button was pressed in last rerun
+    for i in range(max_cols):
+        if st.session_state.get(f'c3_remove_trigger_{i}', False):
+            remove_idx = i
+            break
+
+    # Perform removal before columns are rendered!
+    if (
+        remove_idx is not None
+        and len(st.session_state.chart3_sectors) > 1
+    ):
+        del st.session_state.chart3_sectors[remove_idx]
+        del st.session_state.chart3_last_sectors[remove_idx]
+        # Shift c3_multi_X keys down
+        for idx in range(remove_idx + 1, max_cols):
+            old_key = f'c3_multi_{idx}'
+            new_key = f'c3_multi_{idx - 1}'
+            if old_key in st.session_state:
+                st.session_state[new_key] = st.session_state[old_key]
+                del st.session_state[old_key]
+        # Remove the just removed column's state as well
+        rem_key = f'c3_multi_{remove_idx}'
+        if rem_key in st.session_state:
+            del st.session_state[rem_key]
+        clear_remove_triggers(max_cols)
+        st.rerun()
+    else:
+        clear_remove_triggers(max_cols)
+    # ----- END PATCH -----
+
     updated_sectors = []
     updated_last_sectors = []
     removed_idx = None
@@ -492,6 +532,9 @@ with col3:
                 else:
                     industries_selected = default_inds if default_inds is not None else prev_inds
 
+                # --- PATCH: Remove default values not in current options ---
+                industries_selected = [ind for ind in industries_selected if ind in inds_pretty]
+
                 industries_selected = st.multiselect(
                     f"Industries for {sector}",
                     options=inds_pretty,
@@ -502,9 +545,10 @@ with col3:
                 inds_pretty = []
                 industries_selected = []
 
-            # Remove sector column button (❌)
-            if st.button("❌", key=f"c3_remove_{idx}"):
-                removed_idx = idx
+            # REMOVE BUTTON: Set a state trigger, rerun (handled at top)
+            if st.button("❌", key=f"c3remove_{idx}"):
+                st.session_state[f'c3_remove_trigger_{idx}'] = True
+                st.rerun()
 
             updated_sectors.append({"sector": sector, "industries": industries_selected})
             updated_last_sectors.append(sector)
@@ -516,14 +560,6 @@ with col3:
             st.session_state.chart3_sectors.append({"sector": "", "industries": []})
             st.session_state.chart3_last_sectors.append("")
             st.rerun()
-
-    # Process removals
-    if removed_idx is not None and len(updated_sectors) > 1:
-        del updated_sectors[removed_idx]
-        del updated_last_sectors[removed_idx]
-        st.session_state.chart3_sectors = updated_sectors
-        st.session_state.chart3_last_sectors = updated_last_sectors
-        st.rerun()
 
     # Update session state for next run (no rerun here: so next run uses updated values)
     st.session_state.chart3_sectors = updated_sectors
@@ -703,5 +739,3 @@ with col3:
             st.info("Add sector/industry columns and select at least one for comparison.")
 
     st.divider()
-
-
