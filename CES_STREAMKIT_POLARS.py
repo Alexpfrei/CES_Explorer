@@ -21,8 +21,9 @@ def inject_styles():
       border-radius: 24px;
       box-shadow: 0 2px 16px rgba(191,205,255,0.08);
       border: 1px solid #dde5fd;
-      padding: 22px 20px 13px 20px;
+      padding: 8px 0px 13px 20px;
       margin-bottom: 1.5rem;
+      
     }
     .stMarkdown h3, .stMarkdown h2, .stMarkdown h1 {
       margin-bottom: 0.32rem !important;
@@ -32,6 +33,7 @@ def inject_styles():
     .stMarkdown {
       margin-bottom: 0.7rem !important;
     }
+    
     .card-caption {
       font-size: 1.02rem;
       color: #647398;
@@ -109,8 +111,8 @@ st.set_page_config(page_title="CES/CEU Multi-Series Plotter", layout="wide", pag
 
 @st.cache_resource
 def load_panel_data_and_maps():
-    df_CES = pl.read_parquet("CES_2015_2026_01_14.parquet")
-    df_CEU = pl.read_parquet("CEU_2015_2026_01_14.parquet")
+    df_CES = pl.read_parquet("full_panel_data_parquet/CES_2015_2026_01_14.parquet")
+    df_CEU = pl.read_parquet("full_panel_data_parquet/CEU_2015_2026_01_14.parquet")
     return df_CES, df_CEU
 
 df_CES, df_CEU = load_panel_data_and_maps()
@@ -217,24 +219,45 @@ def chart1_plot(df, sector, industry, series_title, value_mode, year_range, metr
         return
     plot_pd = plot_df.with_columns([pl.lit(pretty_industry(sector, industry)).alias("Legend")]).to_pandas()
     value_label = f"{metric_label}{'' if value_mode else ' (MoM Change)'}"
-
+    
+    # Extract the Series ID from the first row (it is the same for the entire filtered set)
+    series_id = ""
+    if plot_df.height > 0 and "Series_ID" in plot_df.columns:
+        series_id = plot_df[0, "Series_ID"]
+    
     if value_mode:
         fig = px.line(plot_pd, x='Date', y='Value', color='Legend', labels={'Value': value_label, 'Date': '', 'Legend': ''})
         fig.update_traces(line_width=2)
     else:
         fig = px.bar(plot_pd, x='Date', y='Value', color='Legend', barmode="group", labels={'Value': value_label, 'Date': '', 'Legend': ''})
 
+    # Styled, information-rich title
+    seasonality_label_1 = "Seasonally Adjusted" if seasonally_adjusted_1 else "Not Seasonally Adjusted"
     fig.update_layout(
         font=dict(color="black"),
-        legend=dict(orientation="h", yanchor="bottom", y=-0.25, xanchor="center", x=0.5, font=dict(color="black"), title=""),
+        legend=dict(
+            orientation="h", yanchor="bottom", y=-0.25, xanchor="center", x=0.5, 
+            font=dict(color="black"), title=""
+        ),
         xaxis=dict(title_font=dict(color="black"), tickfont=dict(color="black")),
         yaxis=dict(title_font=dict(color="black"), tickfont=dict(color="black")),
-        plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', height=520,
-        margin=dict(l=20, r=20, t=100, b=40), hovermode='x unified',
-        title=f"<b>{pretty_industry(sector, industry)}</b> — {st.session_state.get('season1', 'Seasonally Adjusted')}<br>"
-              f"<span style='font-size:13px;color:gray;'>Sector: {sector}</span><br>"
-              f"<span style='font-size:15px;'>{value_label}</span>"
+        plot_bgcolor='rgba(0,0,0,0)',
+        paper_bgcolor='rgba(0,0,0,0)',
+        height=520,
+        hovermode='x unified',
+        margin=dict(l=50, r=50, t=120, b=60),  # <-- key line: L/R/T/B pixels
+        title=(
+            "<span style='font-size:20px; font-weight:700; color:#23263c;'>Current Employment Statistics</span><br>"
+            f"<span style='font-size:15px; color:#4a5a6a;'>Series:</span> "
+            f"<span style='font-size:15px; font-weight:600; color:#243350;'>{pretty_industry(sector, industry)}</span>, "
+            f"<span style='font-size:14px; color:#6d7787;'>Series ID: {series_id}</span><br>"
+            
+            f"<span style='font-size:15px; color:#4a5a6a;'>Measure:</span> "
+            f"<span style='font-size:15px; font-weight:600; color:#e74a3b;'>{metric_label}{'' if value_mode else ' (MoM Change)'}</span> "
+            f"<span style='font-size:14px; color:#243350;'>| {seasonality_label_1}</span>"
+        )
     )
+
     for trace in fig.data:
         trace.hovertemplate = f'<b>{trace.name}</b><br>%{{x|%b %Y}}: %{{y:,.0f}}<extra></extra>'
     st.plotly_chart(fig, use_container_width=True)
@@ -304,6 +327,8 @@ def chart2_plot(df, chosen_combos, metric_choice, value_mode, year_range):
         fig.update_traces(line_width=2)
     else:
         fig = px.bar(plot_pd, x='Date', y='Value', color='Legend', barmode="group", color_discrete_map=color_discrete_map, labels={'Value': value_label_2, 'Legend': '', 'Date': ''})
+    seasonality_label_1 = "Seasonally Adjusted" if seasonally_adjusted_1 else "Not Seasonally Adjusted"
+    dynamic_title = " — ".join([pretty_industry(sect, ind) for (sect, ind, _) in chosen_combos])
 
     fig.update_layout(
         font=dict(color="black"),
@@ -311,10 +336,13 @@ def chart2_plot(df, chosen_combos, metric_choice, value_mode, year_range):
         xaxis=dict(title_font=dict(color="black"), tickfont=dict(color="black")),
         yaxis=dict(title_font=dict(color="black"), tickfont=dict(color="black")),
         plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', height=520,
-        margin=dict(l=20, r=20, t=100, b=40), hovermode='x unified',
-        title=f"<b>Compare Series</b> — {st.session_state.get('season2','Seasonally Adjusted')}<br>"
-              f"<span style='font-size:15px;'>{value_label_2}</span>"
-    )
+        margin=dict(l=50, r=50, t=120, b=60),  # <-- key line: L/R/T/B pixels
+        title=(
+            f"<span style='font-size:20px; font-weight:700; color:#23263c;'>{dynamic_title}</span><br>"
+            f"<span style='font-size:15px; color:#4a5a6a;'>Measure:</span> "
+            f"<span style='font-size:15px; font-weight:600; color:#e74a3b;'>{metric_choice}{'' if value_mode else ' (MoM Change)'}</span> "
+            f"<span style='font-size:14px; color:#243350;'>| {seasonality_label_1}</span>")
+        )
     for trace in fig.data:
         trace.hovertemplate = f'<b>{trace.name}</b><br>%{{x|%b %Y}}: %{{y:,.0f}}<extra></extra>'
     st.plotly_chart(fig, use_container_width=True)
@@ -324,43 +352,51 @@ def chart2_plot(df, chosen_combos, metric_choice, value_mode, year_range):
 # =================================
 def chart3_column_controls():
     remove_sector_key = "remove_sector_idx"
-    cols = st.columns(len(st.session_state.chart3_sectors))
-    updated_sectors, updated_last_sectors = [], []
-    for idx, c in enumerate(cols):
-        prev_sector = st.session_state.chart3_sectors[idx]["sector"]
-        prev_inds = st.session_state.chart3_sectors[idx]["industries"]
-        sector = c.selectbox(
-            f"Sector {idx+1}",
+    # Header row, only once
+    header_cols = st.columns([2.5, 5, 1], gap="small")
+    header_cols[0].markdown("<div style='font-size:13px; color:#465482; margin-bottom:0.18rem;'>Select sector:</div>", unsafe_allow_html=True)
+    header_cols[1].markdown("<div style='font-size:13px; color:#465482; margin-bottom:0.18rem;'>Select industry:</div>", unsafe_allow_html=True)
+    header_cols[2].markdown(" ")
+
+    for idx, entry in enumerate(st.session_state.chart3_sectors):
+        cols = st.columns([2.5, 5, 1], gap="small")
+        sector_default = entry["sector"]
+        inds_default = entry["industries"]
+
+        # No label above, just the selectbox
+        sector = cols[0].selectbox(
+            "",
             [""] + st.session_state.sector_choices,
-            index=([""] + st.session_state.sector_choices).index(prev_sector) if prev_sector in [""] + st.session_state.sector_choices else 0,
-            key=f"c3_sector_{idx}"
+            index=([""] + st.session_state.sector_choices).index(sector_default) if sector_default in [""] + st.session_state.sector_choices else 0,
+            key=f"c3_sector_{idx}",
+            label_visibility="collapsed",
         )
+
         if sector:
             inds_sorted = [sector] + sorted([ind for ind in st.session_state.sector_industry_map[sector] if ind != sector])
             inds_pretty = [pretty_industry(sector, ind) for ind in inds_sorted]
             default_inds = st.session_state.get(f"c3_multi_{idx}", None)
-            industries_selected = default_inds if default_inds is not None else prev_inds
+            industries_selected = default_inds if default_inds is not None else inds_default
             industries_selected = [ind for ind in industries_selected if ind in inds_pretty]
-            industries_selected = c.multiselect(
-                f"Industries for {sector}",
+            industries_selected = cols[1].multiselect(
+                "",
                 options=inds_pretty,
                 default=industries_selected,
-                key=f"c3_multi_{idx}"
+                key=f"c3_multi_{idx}",
+                label_visibility="collapsed",
             )
         else:
             inds_pretty, industries_selected = [], []
-        if c.button("❌", key=f"c3remove_{idx}"):
+        if cols[2].button("❌", key=f"c3remove_{idx}"):
             st.session_state[remove_sector_key] = idx
             st.rerun()
-        updated_sectors.append({"sector": sector, "industries": industries_selected})
-        updated_last_sectors.append(sector)
-    bcols = st.columns([1, 6])
-    if bcols[0].button("➕", help="Add another sector column", key="c3add") and len(st.session_state.chart3_sectors) < 8:
+        st.session_state.chart3_sectors[idx] = {"sector": sector, "industries": industries_selected}
+
+    bcols = st.columns([2, 8])
+    if bcols[0].button("➕", help="Add another sector row", key="c3add") and len(st.session_state.chart3_sectors) < 8:
         st.session_state.chart3_sectors.append({"sector": "", "industries": []})
         st.session_state.chart3_last_sectors.append("")
         st.rerun()
-    st.session_state.chart3_sectors = updated_sectors
-    st.session_state.chart3_last_sectors = updated_last_sectors
 
 def chart3_plot(df, selected, metric_choice, year_range):
     chart_filters = []
@@ -400,7 +436,6 @@ def chart3_plot(df, selected, metric_choice, year_range):
         chart3_df = pl.concat(chart3_rows)
         chart3_pd = chart3_df.to_pandas()
         chart3_pd['Month'] = chart3_pd['Date'].dt.to_period('M').astype(str)
-        st.markdown(f"""<span style='color:#1b293e; font-size:15px;'>Metric: <b>{metric_choice}</b> | Time: <b>{year_range[0]}–{year_range[1]}</b> | <b>{st.session_state.get('ct3_season','Seasonally Adjusted')}</b></span>""", unsafe_allow_html=True)
         fig = px.bar(
             chart3_pd, x="Month", y="YoY_Change", color="Legend",
             labels={"YoY_Change": metric_choice + " (YoY Δ)", "Legend": ""}, barmode="relative"
@@ -415,12 +450,22 @@ def chart3_plot(df, selected, metric_choice, year_range):
                 marker=dict(color="black", size=7), line=dict(color="black", width=3, dash="dash"),
                 hovertemplate="<b>Total Employment Growth</b><br>Month: %{x}<br>Growth: %{y:,.0f}<extra></extra>"
             ))
+
+        seasonality_label_1 = "Seasonally Adjusted" if seasonally_adjusted_1 else "Not Seasonally Adjusted"
         fig.update_layout(
             font=dict(color="#23263c"),
             legend=dict(orientation="h", yanchor="bottom", y=-0.32, xanchor="center", x=0.5, font=dict(color="#243350"), title=""),
-            xaxis=dict(title=""), yaxis=dict(title_font=dict(color="#23263c"), tickfont=dict(color="#23263c")),
+            xaxis=dict(title=""),
+            yaxis=dict(title_font=dict(color="#23263c"), tickfont=dict(color="#23263c")),
             plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)',
-            height=520, margin=dict(l=18, r=18, t=48, b=46), title=None
+            height=520,
+            margin=dict(l=18, r=18, t=48, b=46),
+            title=(
+                f"<span style='font-size:20px; font-weight:700; color:#23263c;'>Year-on-Year Change of US Employment by Sector</span><br>"
+                f"<span style='font-size:15px; color:#4a5a6a;'>Measure:</span> "
+                f"<span style='font-size:15px; font-weight:600; color:#e74a3b;'>{metric_choice}</span> "
+                f"<span style='font-size:14px; color:#243350;'>| {seasonality_label_1}</span>")
+            
         )
         st.plotly_chart(fig, use_container_width=True)
     else:
@@ -521,19 +566,16 @@ with col2:
     elif not metrics_sorted_2:
         st.info("Select at least one sector/industry pair with a common metric.")
 # --------- Chart 3 ----------
-col3, _ = st.columns(2, gap="large")
-with col3:
-    st.markdown("<h3>📊 <b>Monthly Year-over-Year Change (Stacked Bar)</b></h3>", unsafe_allow_html=True)
+st.markdown("<h3>📊 <b>Monthly Year-over-Year Change (Stacked Bar)</b></h3>", unsafe_allow_html=True)
+col_left3, col_right3 = st.columns([2.2, 5], gap="large")
+
+with col_left3:
     st.markdown("""<div class='card-caption'>
-    Pre-populated with: <b>Manufacturing, Construction, Mining and logging, Transportation and warehousing, Utilities</b>.
-    <br>
-    <span style='color:#5d6e85;'>A dashed black line shows total employment growth/net change (negatives subtract).
-    <br>
     <b>➕</b> to add a sector, <b>❌</b> to remove (see below).</span>
-    </div>""", unsafe_allow_html=True)
+    """, unsafe_allow_html=True)
     st.divider()
 
-    # Remove sector logic
+    # Everything that is now inside your `with col3:` block -- but minus the plot!
     remove_sector_key = "remove_sector_idx"
     if st.session_state.get(remove_sector_key, None) is not None:
         idx_to_remove = st.session_state[remove_sector_key]
@@ -544,10 +586,9 @@ with col3:
             if rem_key in st.session_state: del st.session_state[rem_key]
         st.session_state[remove_sector_key] = None
         st.rerun()
-
     chart3_column_controls()
 
-    # Get sector/industry pairs for plotting
+    # All the input and selection logic—including optcols, toggles, slider, and calculating `selected`, `metric_choice`, etc
     selected = []
     legend_map = {}
     for entry in st.session_state.chart3_sectors:
@@ -585,14 +626,13 @@ with col3:
             metric_choice = None
             st.info("Choose sector(s)/industry(ies) above to see shared metrics.", icon="🔎")
     with optcols[1]:
-        # --- Toggle replaces radio for seasonality ---
         seasonally_adjusted_3 = st.toggle(
             "Seasonally Adjusted",
             value=True,
             key="ct3_season"
         )
     df_3 = df_CES if seasonally_adjusted_3 else df_CEU
-    
+
     if len(df_3) > 0:
         min_year3, max_year3 = df_3["Date"].min().year, df_3["Date"].max().year
         slider_start = max(min_year3, 2022)
@@ -602,11 +642,13 @@ with col3:
             max_value=max_year3,
             value=(slider_start, max_year3),
             step=1,
-            key="ct3_years"
+            key="ct3_years",
+            label_visibility="collapsed",
         )
     else:
         year_range3 = (2022, 2026)
-    
+
+with col_right3:
     chart3_plot(df_3, selected, metric_choice, year_range3)
     st.divider()
 
