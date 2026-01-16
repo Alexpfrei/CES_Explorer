@@ -464,31 +464,18 @@ with col3:
             k = f'c3_remove_trigger_{i}'
             if k in st.session_state:
                 del st.session_state[k]
-
+    
     remove_idx = None
     max_cols = 8
-
-    # Detect if a remove button was pressed in last rerun
+    
     for i in range(max_cols):
         if st.session_state.get(f'c3_remove_trigger_{i}', False):
             remove_idx = i
             break
-
-    # Perform removal before columns are rendered!
-    if (
-        remove_idx is not None
-        and len(st.session_state.chart3_sectors) > 1
-    ):
+    
+    if remove_idx is not None and len(st.session_state.chart3_sectors) > 1:
         del st.session_state.chart3_sectors[remove_idx]
         del st.session_state.chart3_last_sectors[remove_idx]
-        # Shift c3_multi_X keys down
-        for idx in range(remove_idx + 1, max_cols):
-            old_key = f'c3_multi_{idx}'
-            new_key = f'c3_multi_{idx - 1}'
-            if old_key in st.session_state:
-                st.session_state[new_key] = st.session_state[old_key]
-                del st.session_state[old_key]
-        # Remove the just removed column's state as well
         rem_key = f'c3_multi_{remove_idx}'
         if rem_key in st.session_state:
             del st.session_state[rem_key]
@@ -739,3 +726,4 @@ with col3:
             st.info("Add sector/industry columns and select at least one for comparison.")
 
     st.divider()
+
