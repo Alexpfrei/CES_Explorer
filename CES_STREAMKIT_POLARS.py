@@ -2,23 +2,45 @@ import streamlit as st
 import plotly.express as px
 import polars as pl
 from datetime import datetime
+import plotly.graph_objs as go
 # -- Modern styling for compact, card-like layout and grouped controls
 st.set_page_config(page_title="CES/CEU Multi-Series Plotter", layout="wide", page_icon="📈")
+# ---------- Modern Card Style ----------
 st.markdown("""
 <style>
-.stChart, .stPlotlyChart {
-  background-color: var(--background-color,rgba(255,255,255,0.92));
-  border-radius: 14px;
-  box-shadow: 0 1.5px 4px rgba(0,0,0,0.04), 0 0.5px 2px rgba(0,0,0,0.03);
-  padding: 16px 10px 2px 10px;
-  margin-bottom: 0.8rem;
+[data-testid="stVerticalBlock"] {
+  padding-top: 0rem !important; padding-bottom: 0rem !important;
 }
-.stSelectbox label, .stRadio label, .stSlider label, h2, h3 { font-weight: 700; color: var(--text-color,inherit);}
-.stRadio, .stSelectbox, .stSlider {margin-bottom: 0.1rem;}
+.stChart, .stPlotlyChart, .my-card {
+  background: linear-gradient(135deg,rgba(240,243,250,0.93) 0%,rgba(230,235,244,0.98) 100%);
+  border-radius: 24px;
+  box-shadow: 0 3px 20px rgba(140,160,212,0.10),0 1.5px 4px rgba(140,140,140,0.06);
+  padding: 18px 16px 7px 16px;
+  margin-bottom: 1.25rem;
+  border: 1px solid rgba(200,210,226,0.18);
+}
+.stMarkdown h3, .stMarkdown h2, .stMarkdown h1 {
+  margin-bottom: 0.4rem !important;
+  margin-top: 0.6rem !important;
+}
+.stMarkdown {
+  margin-bottom: 0.7rem !important;
+}
+.card-caption {
+  font-size: 0.95rem !important;
+  color: #4a5c73 !important;
+  margin-bottom: 1.2rem !important;
+  margin-top: -0.3rem !important;
+}
+.stSelectbox label, .stRadio label, .stSlider label, h2, h3 { 
+    font-weight: 700; color: #213052;
+}
+.stRadio, .stSelectbox, .stSlider {margin-bottom: 0.15rem;}
 .stRadio, .stSelectbox, .stSlider > label {padding-top: 0rem !important; margin-bottom:0rem !important;}
-h2,h3 {margin-bottom:0.3rem !important;}
-.stMarkdown {margin-bottom:0.1rem;}
-footer {margin-top: 0.5rem;}
+footer {margin-top: 1.0rem;}
+hr {border-top: 1px solid #dbe2ee;}
+/* Remove excess vertical gap between columns on wide screens */
+[data-testid="column"] {padding-top: 6px!important;}
 </style>
 """, unsafe_allow_html=True)
 
@@ -379,5 +401,307 @@ with col2:
         else:
             st.warning("No data available for the combination selected.")
 
-
 st.markdown("<br><span style='color: gray; font-size: 13px;'>Source: U.S. Bureau of Labor Statistics, CES/CEU (Current Employment Statistics)</span>", unsafe_allow_html=True)
+
+import plotly.graph_objs as go
+
+
+# ---- Cache sector-industry maps and pretty names on first load ----
+if "sector_choices" not in st.session_state:
+    st.session_state.sector_choices = sorted(
+        df_CES["Commerce_Sector"].unique().to_list(), 
+        key=lambda s: (s != "Total nonfarm", s)
+    )
+if "sector_industry_map" not in st.session_state:
+    st.session_state.sector_industry_map = {
+        s: df_CES.filter(pl.col("Commerce_Sector") == s)["Commerce_Industry"].unique().to_list()
+        for s in st.session_state.sector_choices
+    }
+if "pretty_names_map" not in st.session_state:
+    st.session_state.pretty_names_map = {}
+    for sector in st.session_state.sector_choices:
+        for ind in st.session_state.sector_industry_map[sector]:
+            st.session_state.pretty_names_map[(sector, ind)] = pretty_industry(sector, ind)
+
+# ---- Default sector/industries for first load ----
+default_sectors_chart3 = [
+    "Manufacturing",
+    "Construction",
+    "Mining and logging",
+    "Transportation and warehousing",
+    "Utilities"
+]
+if "chart3_sectors" not in st.session_state or not st.session_state.chart3_sectors:
+    st.session_state.chart3_sectors = []
+    for s in default_sectors_chart3:
+        inds_sorted = [s] + sorted([ind for ind in st.session_state.sector_industry_map[s] if ind != s])
+        sector_total_pretty = pretty_industry(s, s)
+        st.session_state.chart3_sectors.append({"sector": s, "industries": [sector_total_pretty]})
+if "chart3_last_sectors" not in st.session_state or not st.session_state.chart3_last_sectors:
+    st.session_state.chart3_last_sectors = [d["sector"] for d in st.session_state.chart3_sectors]
+
+col3, _ = st.columns(2, gap="large")
+with col3:
+    # ---- Card & Section styling ----
+    st.markdown(
+        "<h3>📊 <b>Monthly Year-over-Year Change (Stacked Bar)</b></h3>",
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        """<div class='card-caption'>
+        Pre-populated with: <b>Manufacturing, Construction, Mining and logging, Transportation and warehousing, Utilities</b>.
+        <br>
+        <span style='color:#5d6e85;'>A dashed black line shows total employment growth/net change (negatives subtract).
+        <br>
+        <b>➕</b> to add a sector, <b>❌</b> to remove (see below).</span>
+        </div>""", unsafe_allow_html=True
+    )
+    st.divider()
+
+    updated_sectors = []
+    updated_last_sectors = []
+    removed_idx = None
+
+    cols = st.columns(len(st.session_state.chart3_sectors))
+    for idx, c in enumerate(cols):
+        with c:
+            prev_sector = st.session_state.chart3_sectors[idx]["sector"]
+            prev_inds = st.session_state.chart3_sectors[idx]["industries"]
+            prev_last_sector = (
+                st.session_state.chart3_last_sectors[idx] 
+                if idx < len(st.session_state.chart3_last_sectors) 
+                else prev_sector
+            )
+            sector = st.selectbox(
+                f"Sector {idx+1}",
+                [""] + st.session_state.sector_choices,
+                index=([""] + st.session_state.sector_choices).index(prev_sector) if prev_sector in [""] + st.session_state.sector_choices else 0,
+                key=f"c3_sector_{idx}"
+            )
+
+            # Get industries and pretty names
+            if sector:
+                inds_sorted = [sector] + sorted([ind for ind in st.session_state.sector_industry_map[sector] if ind != sector])
+                inds_pretty = [pretty_industry(sector, ind) for ind in inds_sorted]
+                sector_total_pretty = pretty_industry(sector, sector)
+
+                # Initialize multiselect state on sector change ONLY, otherwise preserve user selection
+                default_inds = st.session_state.get(f"c3_multi_{idx}", None)
+                if sector != prev_last_sector or not prev_inds:
+                    industries_selected = default_inds or [sector_total_pretty]
+                else:
+                    industries_selected = default_inds if default_inds is not None else prev_inds
+
+                industries_selected = st.multiselect(
+                    f"Industries for {sector}",
+                    options=inds_pretty,
+                    default=industries_selected,
+                    key=f"c3_multi_{idx}"
+                )
+            else:
+                inds_pretty = []
+                industries_selected = []
+
+            # Remove sector column button (❌)
+            if st.button("❌", key=f"c3_remove_{idx}"):
+                removed_idx = idx
+
+            updated_sectors.append({"sector": sector, "industries": industries_selected})
+            updated_last_sectors.append(sector)
+
+    # ---- Add sector column (new starts blank) ----
+    bcols = st.columns([1, 6])
+    with bcols[0]:
+        if st.button("➕", help="Add another sector column", key="c3add") and len(st.session_state.chart3_sectors) < 8:
+            st.session_state.chart3_sectors.append({"sector": "", "industries": []})
+            st.session_state.chart3_last_sectors.append("")
+            st.rerun()
+
+    # Process removals
+    if removed_idx is not None and len(updated_sectors) > 1:
+        del updated_sectors[removed_idx]
+        del updated_last_sectors[removed_idx]
+        st.session_state.chart3_sectors = updated_sectors
+        st.session_state.chart3_last_sectors = updated_last_sectors
+        st.rerun()
+
+    # Update session state for next run (no rerun here: so next run uses updated values)
+    st.session_state.chart3_sectors = updated_sectors
+    st.session_state.chart3_last_sectors = updated_last_sectors
+
+    # Prepare sector/industry pairs for plotting
+    selected = []
+    legend_map = {}
+    for entry in st.session_state.chart3_sectors:
+        sector = entry["sector"]
+        industries = entry["industries"] if entry["industries"] else []
+        if sector and industries:
+            inds_sorted = [sector] + sorted([ind for ind in st.session_state.sector_industry_map[sector] if ind != sector])
+            inds_pretty = [pretty_industry(sector, ind) for ind in inds_sorted]
+            ind_map = dict(zip(inds_pretty, inds_sorted))
+            for ind_pretty in industries:
+                sec = sector
+                ind = ind_map[ind_pretty]
+                legend_label = f"{sector} — {ind}"
+                selected.append((sec, ind, legend_label))
+                legend_map[(sec, ind)] = legend_label
+
+    # ---- Metric and seasonal selection ----
+    metric_maps = []
+    for sect, ind, _ in selected:
+        _, m = get_metrics_for_combo(df_CES, sect, ind)
+        metric_maps.append(m)
+    common_metrics_map = intersection_maps(metric_maps) if metric_maps else {}
+    main_metrics = [m for m in common_metrics_map.keys() if "all employees, thousands" in m.lower()]
+    other_metrics = [m for m in common_metrics_map.keys() if "all employees, thousands" not in m.lower()]
+    metrics_sorted = main_metrics + sorted(other_metrics)
+
+    optcols = st.columns(2)
+    with optcols[0]:
+        if metrics_sorted:
+            preferred = "all employees, thousands"
+            default_idx = next(
+                (metrics_sorted.index(m) for m in metrics_sorted if m.lower() == preferred), 
+                0
+            )
+            metric_choice = st.selectbox(
+                "Metric to compare:",
+                metrics_sorted,
+                index=default_idx,
+                key="ct3_metric"
+            )
+        else:
+            metric_choice = None
+            st.info("Choose sector(s)/industry(ies) above to see shared metrics.", icon="🔎")
+    with optcols[1]:
+        source_file = st.radio(
+            "Data set:",
+            ["Seasonally Adjusted", "Not Seasonally Adjusted"],
+            index=0,
+            horizontal=True,
+            key="ct3_season"
+        )
+    df_3 = df_CES if source_file == "Seasonally Adjusted" else df_CEU
+
+    # ---- Slider: default start at 2022 or min_year ----
+    if len(df_3) > 0:
+        min_date3 = df_3["Date"].min()
+        max_date3 = df_3["Date"].max()
+        min_year3 = min_date3.year
+        max_year3 = max_date3.year
+        slider_start = max(min_year3, 2022)
+        year_range3 = st.slider(
+            "Year range:",
+            min_value=min_year3,
+            max_value=max_year3,
+            value=(slider_start, max_year3),
+            step=1,
+            key="ct3_years"
+        )
+        date_start = pl.datetime(year_range3[0], 1, 1)
+        date_end = pl.datetime(year_range3[1], 12, 31)
+    else:
+        date_start = date_end = datetime.now()
+
+    # --- Efficient bulk filter for all selected combos ---
+    chart_filters = []
+    for sect, ind, legend_label in selected:
+        _, metric_map = get_metrics_for_combo(df_3, sect, ind)
+        if metric_choice and metric_choice in metric_map:
+            metric_title = metric_map[metric_choice]
+            chart_filters.append({
+                "sector": sect,
+                "industry": ind,
+                "metric_title": metric_title,
+                "legend": legend_label
+            })
+    chart3_rows = []
+    if chart_filters:
+        mask = (
+            (pl.col("Date") >= date_start) &
+            (pl.col("Date") <= date_end)
+        )
+        df_filtered = df_3.filter(mask)
+        for f in chart_filters:
+            filtered = (
+                df_filtered.filter(
+                    (pl.col("Commerce_Sector").str.strip_chars().str.to_lowercase() == f["sector"].lower().strip()) &
+                    (pl.col("Commerce_Industry").str.strip_chars().str.to_lowercase() == f["industry"].lower().strip()) &
+                    (pl.col("Series_Title") == f["metric_title"])
+                )
+                .sort("Date")
+                .with_columns([
+                    pl.col("Value").diff(n=12).alias("YoY_Change"),
+                    pl.lit(f["legend"]).alias("Legend"),
+                    pl.col("Date")
+                ])
+                .select(["Date", "YoY_Change", "Legend"])
+                .drop_nulls("YoY_Change")
+            )
+            if filtered.height > 0:
+                chart3_rows.append(filtered)
+
+    # --- Data and Plot ---
+    with st.container():
+        if chart3_rows:
+            chart3_df = pl.concat(chart3_rows)
+            chart3_pd = chart3_df.to_pandas()
+            chart3_pd['Month'] = chart3_pd['Date'].dt.to_period('M').astype(str)
+            st.markdown(f"""
+            <span style='color:#1b293e; font-size:15px;'>Metric: <b>{metric_choice}</b> | Time: <b>{year_range3[0]}–{year_range3[1]}</b> | <b>{source_file}</b></span>
+            """, unsafe_allow_html=True)
+
+            fig = px.bar(
+                chart3_pd,
+                x="Month",
+                y="YoY_Change",
+                color="Legend",
+                labels={"YoY_Change": metric_choice + " (YoY Δ)", "Legend": ""},
+                barmode="relative"
+            )
+            # Add dashed black line: total employment growth per month
+            if not chart3_pd.empty:
+                total_line_df = (
+                    chart3_pd.groupby("Month", as_index=False)
+                    ["YoY_Change"].sum()
+                    .rename(columns={"YoY_Change": "Total Employment Growth"})
+                )
+                fig.add_trace(
+                    go.Scatter(
+                        x=total_line_df["Month"],
+                        y=total_line_df["Total Employment Growth"],
+                        name="Total Employment Growth",
+                        mode="lines+markers",
+                        marker=dict(color="black", size=7),
+                        line=dict(color="black", width=3, dash="dash"),
+                        hovertemplate="<b>Total Employment Growth</b><br>Month: %{x}<br>Growth: %{y:,.0f}<extra></extra>"
+                    )
+                )
+            fig.update_layout(
+                font=dict(color="#23263c"),
+                legend=dict(
+                    orientation="h",
+                    yanchor="bottom",
+                    y=-0.32,
+                    xanchor="center",
+                    x=0.5,
+                    font=dict(color="#243350"),
+                    title=""
+                ),
+                xaxis=dict(title=""),
+                yaxis=dict(title_font=dict(color="#23263c"), tickfont=dict(color="#23263c")),
+                plot_bgcolor='rgba(0,0,0,0)',
+                paper_bgcolor='rgba(0,0,0,0)',
+                height=520,
+                margin=dict(l=18, r=18, t=48, b=46),
+                title=None
+            )
+            st.plotly_chart(fig, use_container_width=True)
+        elif selected and not metric_choice:
+            st.warning("No common metric found for these selections.")
+        else:
+            st.info("Add sector/industry columns and select at least one for comparison.")
+
+    st.divider()
+
+
