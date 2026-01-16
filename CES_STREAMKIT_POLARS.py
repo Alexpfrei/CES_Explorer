@@ -726,4 +726,3 @@ with col3:
             st.info("Add sector/industry columns and select at least one for comparison.")
 
     st.divider()
-
