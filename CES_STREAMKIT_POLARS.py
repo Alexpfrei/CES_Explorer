@@ -111,8 +111,8 @@ st.set_page_config(page_title="CES/CEU Multi-Series Plotter", layout="wide", pag
 
 @st.cache_resource
 def load_panel_data_and_maps():
-    df_CES = pl.read_parquet("full_panel_data_parquet/CES_2015_2026_01_14.parquet")
-    df_CEU = pl.read_parquet("full_panel_data_parquet/CEU_2015_2026_01_14.parquet")
+    df_CES = pl.read_parquet("CES_2015_2026_01_14.parquet")
+    df_CEU = pl.read_parquet("CEU_2015_2026_01_14.parquet")
     return df_CES, df_CEU
 
 df_CES, df_CEU = load_panel_data_and_maps()
@@ -653,3 +653,4 @@ with col_right3:
     st.divider()
 
 st.markdown("<br><span style='color: gray; font-size: 13px;'>Source: U.S. Bureau of Labor Statistics, CES/CEU (Current Employment Statistics)</span>", unsafe_allow_html=True)
+
