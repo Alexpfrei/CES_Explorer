@@ -101,7 +101,7 @@ def inject_styles():
     """, unsafe_allow_html=True)
 
 inject_styles()
-st.set_page_config(page_title="CES/CEU Multi-Series Plotter", layout="wide", page_icon="📈")
+st.set_page_config(page_title="Current Employment Statistics Multi-Series Plotter", layout="wide", page_icon="📈")
 
 # =================================
 #            DATA LOAD
@@ -653,4 +653,5 @@ with col_right3:
     st.divider()
 
 st.markdown("<br><span style='color: gray; font-size: 13px;'>Source: U.S. Bureau of Labor Statistics, CES/CEU (Current Employment Statistics)</span>", unsafe_allow_html=True)
+
 
