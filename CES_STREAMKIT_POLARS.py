@@ -474,12 +474,12 @@ def chart3_plot(df, selected, metric_choice, year_range):
 # =================================
 #           PAGE LAYOUT
 # =================================
-st.title("CES/CEU Multi-Series Plotter")
+st.title("Current Employment Statistics Multi-Series Plotter")
 col1, col2 = st.columns(2, gap="large")
 
 # ---------- Chart 1 ----------
 with col1:
-    st.markdown("### National-Level CES/CEU Trends by Sector & Industry")
+    st.markdown("### National-Level Current Employment Statistics Trends by Sector & Industry")
     st.caption("Choose sector, industry, and metric to visualize employment trends below.")
     row_display1, row_season1 = st.columns(2)
     series_type_1 = row_display1.radio(
@@ -516,7 +516,7 @@ with col1:
 # --------- Chart 2 ----------
 with col2:
     st.markdown("### Flexible Compare: Up to 3 Sectors/Industries")
-    st.caption("Compare up to three CES/CEU sector/industry metrics (same time range and metric across all).")
+    st.caption("Compare up to three sector/industry metrics (same time range and metric across all).")
     row_display2, row_season2 = st.columns(2)
     series_type_2 = row_display2.radio(
         "Display as (Compare Chart):",
@@ -653,5 +653,6 @@ with col_right3:
     st.divider()
 
 st.markdown("<br><span style='color: gray; font-size: 13px;'>Source: U.S. Bureau of Labor Statistics, CES/CEU (Current Employment Statistics)</span>", unsafe_allow_html=True)
+
 
 
